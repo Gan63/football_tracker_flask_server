@@ -103,7 +103,7 @@ def upload_video():
 
             # MCP request
             response = requests.post(
-                "http://localhost:8000/tools/run-tracking",
+                "https://football-tracker-mcp.onrender.com",
                 json=payload
             )
             data = response.json()
