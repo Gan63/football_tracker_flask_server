@@ -1,4 +1,4 @@
-from utils import *
+'''from utils import *
 from trackers import *
 from team_assigner import *
 from player_ball_assigner import *
@@ -103,4 +103,5 @@ def process_video_optimized(input_path,output_path):
             return {"error": str(e)}
 
         finally:
-            gc.collect()
+            gc.collect()****/
+
