@@ -3,16 +3,13 @@ from flask import Flask, render_template, jsonify, request, send_from_directory
 from flask_cors import CORS
 import json
 import os
-import threading
-import time
-import traceback
 import logging
 from datetime import datetime
 from werkzeug.utils import secure_filename
 import base64
 import requests   # ✅ REQUIRED FOR MCP COMMUNICATION
 
-from football_core import tracker_api
+# 🔴 REMOVED: from football_core import tracker_api  (not needed here)
 
 # ============================================================
 # BASIC SETUP
@@ -56,12 +53,12 @@ def index():
     try:
         return render_template('index.html')
     except Exception as e:
+        logger.error(f"Error rendering index.html: {e}")
         return f"Error loading page: {e}", 500
 
 
 # ============================================================
-# ⚡  THIS IS THE IMPORTANT ROUTE YOU WANTED UPDATED
-#     NOW CONNECTED TO MCP SERVER
+# ⚡ UPLOAD + SEND TO MCP SERVER
 # ============================================================
 
 @app.route('/upload', methods=['GET', 'POST'])
@@ -78,7 +75,7 @@ def upload_video():
             return jsonify({"error": "No file selected"}), 400
 
         if not allowed_file(file.filename):
-            return jsonify({"error": f"Invalid file type"}), 400
+            return jsonify({"error": "Invalid file type"}), 400
 
         # Save file locally
         filename = secure_filename(file.filename)
@@ -91,44 +88,63 @@ def upload_video():
         logger.info(f"File saved at {filepath}")
 
         # ====================================================
-        # 🔥 SEND FILE TO MCP SERVER (IMPORTANT PART)
+        # 🔥 SEND FILE TO MCP SERVER (Flask API on Render)
         # ====================================================
         try:
             with open(filepath, "rb") as f:
                 video_base64 = base64.b64encode(f.read()).decode()
 
+            # ⚠️ Payload shape – match MCP API (no "input" wrapper)
             payload = {
-                "input": {"video_base64": video_base64}
+                "video_base64": video_base64
             }
 
-            # MCP request
+            # ✅ Call the correct endpoint on your MCP API
             response = requests.post(
-                "https://football-tracker-mcp.onrender.com",
-                json=payload
+                "https://football-tracker-mcp.onrender.com/run-tracking",
+                json=payload,
+                timeout=600  # allow long processing
             )
+
+            # If MCP itself failed (500, 404, etc.)
+            if not response.ok:
+                logger.error(f"MCP HTTP error: {response.status_code} {response.text}")
+                return jsonify({"error": f"MCP HTTP error: {response.status_code}"}), 500
+
             data = response.json()
+            logger.info(f"MCP response: {data.keys()}")
 
             if data.get("status") == "success":
                 # Save processed output from MCP
-                output_path = os.path.join("output", "mcp_output.mp4")
+                output_path = os.path.join(OUTPUT_FOLDER, "mcp_output.mp4")
+                if "output_video_base64" not in data:
+                    return jsonify({"error": "MCP response missing 'output_video_base64'"}), 500
+
                 with open(output_path, "wb") as f:
                     f.write(base64.b64decode(data["output_video_base64"]))
 
+                # tracking_data might be missing – handle gracefully
+                tracking = data.get("tracking_data")
+
                 return jsonify({
                     "message": "Processing completed via MCP",
-                    "tracking_data": data["tracking_data"],
+                    "tracking_data": tracking,
                     "output_video": "mcp_output.mp4"
                 })
 
             else:
-                return jsonify({"error": data.get("message", "Unknown error")}), 500
+                return jsonify({"error": data.get("message", "Unknown MCP error")}), 500
 
         except Exception as e:
             logger.error(f"MCP ERROR: {e}")
             return jsonify({"error": f"MCP connection failed: {str(e)}"}), 500
 
-    # GET request → returns upload page
-    return render_template('upload.html')
+    # GET → return upload page
+    try:
+        return render_template('upload.html')
+    except Exception as e:
+        logger.error(f"Error rendering upload.html: {e}")
+        return f"Error loading upload page: {e}", 500
 
 
 # ============================================================
@@ -141,7 +157,7 @@ def get_status():
 
 
 # ============================================================
-# GET TRACKING DATA (from MCP)
+# GET TRACKING DATA (if you store it later)
 # ============================================================
 
 @app.route('/api/tracking-data')
@@ -176,7 +192,7 @@ def system_info():
 
 
 # ============================================================
-# MAIN ENTRY
+# MAIN ENTRY (local only – Render uses gunicorn)
 # ============================================================
 
 if __name__ == '__main__':
@@ -184,7 +200,7 @@ if __name__ == '__main__':
     print("🚀 MCP-ENABLED FOOTBALL TRACKER — FLASK SERVER")
     print("=" * 60)
     print("🌐 Running at: http://localhost:5000")
-    print("🔗 Connected to MCP Server at: http://localhost:8000")
+    print("🔗 Connected to MCP Server at: https://football-tracker-mcp.onrender.com/run-tracking")
     print("=" * 60)
 
     app.run(debug=False, host='0.0.0.0', port=5000)
