@@ -101,9 +101,7 @@ def upload_video():
 
             # ✅ Call the correct endpoint on your MCP API
             response = requests.post(
-                "https://football-tracker-mcp.onrender.com/
-                
-                run-tracking"
+                "https://football-tracker-mcp.onrender.com/run-tracking")
                 json=payload,
                 timeout=600  # allow long processing
             )
