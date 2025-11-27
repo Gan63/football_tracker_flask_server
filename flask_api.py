@@ -103,7 +103,7 @@ def upload_video():
         # ====================================================
         try:
             response = requests.post(
-                "https://football-tracker-mcp.onrender.com/run-tracking",
+                "https://clamboy-football-tracker-mcp.hf.space/run-tracking",
                 json=payload,
                 timeout=600   # long timeout for video processing
             )
